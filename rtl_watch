@@ -31,27 +31,80 @@
 
 import tkinter as tk
 import tkinter.font as tkf
+from configobj import ConfigObj
+from configobj.validate import Validator
 import random
 import json
 import time
+import os
 import getopt, sys
 from paho.mqtt import client as mqtt_client
 import datetime
 import class_stats as stats
 
 ###############################################################################
+##  *** Configuration File Specifications ***
+
+# Rather than hard-coded values, use a configuration file to specify
+#   values for rtl_watch. ConfigObj is the workhorse used for this.
+spec = """
+## Rtl_watch configuration file
+## Please edit this file to your configuration.
+# ---------------------------------------------
+
+# mqtt broker hostname (i.e. the host on which mosquitto is running)
+broker = string(default='<mymqtthost>')
+
+# mqtt broker port
+port = integer(default=1883)
+
+# mqtt topic to subscribe to
+topic = string(default='rtl_433/+/events')
+
+## IFF your mqtt broker is secured, provide login info
+## generate client ID with pub prefix randomly
+client_id = string(default='python-mqtt-{random.randint(0, 100)}')
+
+# mqtt username
+username = string(default='')
+
+# mqtt password
+password = string(default='')
+"""
+
+spec = spec.split("\n")
+config_file = './rtl_watch.cfg'
+if os.path.isfile(config_file):
+    conf = ConfigObj(config_file, configspec=spec)
+else:
+    conf = ConfigObj(config_file, configspec=spec)
+    conf.filename = config_file
+    conf.validate(Validator(), copy=True)
+    conf.write()
+    print("rtl_watch configuration file created:", config_file)
+    sys.exit(0)
+###############################################################################
+##  *** Load values from configuration file ***
+broker = conf['broker']
+port = conf['port']
+topic = conf['topic']
+client_id = conf['client_id']
+username = conf['username']
+password = conf['password']
+# And we're done
+###############################################################################
 ##  *** BEGIN LOCAL MODIFICATIONS ***
 
 # MQTT connection parameters
 # Parameters used to establish the mqtt connection to the rtl_433 receiver mqtt publisher
-broker = '<mymqtthost>'
-port = 1883
-topic = "rtl_433/+/events"
+#broker = '<mymqtthost>'
+#port = 1883
+#topic = "rtl_433/+/events"
 # If your mqtt broker is secured, provide login info
 # generate client ID with pub prefix randomly
-client_id = f'python-mqtt-{random.randint(0, 100)}'
-username = ''
-password = ''
+#client_id = f'python-mqtt-{random.randint(0, 100)}'
+#username = ''
+#password = ''
 ##  *** END LOCAL MODIFICATIONS ***
 ###############################################################################
 
@@ -225,8 +278,10 @@ def connect_mqtt() -> mqtt_client:
             print("Failed attempt to connect to ", mqtt)
             print("  with userdata ", userdata)
             print("Return code %d\n", rc)
-
-    mqtt = mqtt_client.Client(client_id, clean_session=False)
+    # Paho MQTT now requires a version designation for < 2.0.
+    # https://github.com/eclipse/paho.mqtt.python/blob/master/docs/migrations.rst
+    MqttClient = mqtt_client(mqtt.CallbackAPIVersion.VERSION1)
+    mqtt = MqttClient.Client(client_id, clean_session=False)
     mqtt.username_pw_set(username, password)
     mqtt.on_connect = on_connect
     mqtt.connect(broker, port)
