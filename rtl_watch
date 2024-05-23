@@ -33,6 +33,7 @@ import tkinter as tk
 import tkinter.font as tkf
 from configobj import ConfigObj
 from configobj.validate import Validator
+from ast import literal_eval
 import random
 import json
 import time
@@ -52,7 +53,8 @@ spec = """
 ## Please edit this file to your configuration.
 # ---------------------------------------------
 
-# mqtt broker hostname (i.e. the host on which mosquitto is running)
+# Hostname of the system running the mqtt broker
+# This is likely the only thing that needs to be changed
 broker = string(default='<mymqtthost>')
 
 # mqtt broker port
@@ -62,8 +64,9 @@ port = integer(default=1883)
 topic = string(default='rtl_433/+/events')
 
 ## IFF your mqtt broker is secured, provide login info
-## generate client ID with pub prefix randomly
-client_id = string(default='python-mqtt-{random.randint(0, 100)}')
+## Leaving this blank will cause mqtt to generate a random id for you
+## Which is can be a good thing.
+client_id = string(default='')
 
 # mqtt username
 username = string(default='')
@@ -86,7 +89,7 @@ else:
 ###############################################################################
 ##  *** Load values from configuration file ***
 broker = conf['broker']
-port = conf['port']
+port = literal_eval(conf['port'])
 topic = conf['topic']
 client_id = conf['client_id']
 username = conf['username']
@@ -280,10 +283,15 @@ def connect_mqtt() -> mqtt_client:
             print("Return code %d\n", rc)
     # Paho MQTT now requires a version designation for < 2.0.
     # https://github.com/eclipse/paho.mqtt.python/blob/master/docs/migrations.rst
-    MqttClient = mqtt_client(mqtt.CallbackAPIVersion.VERSION1)
-    mqtt = MqttClient.Client(client_id, clean_session=False)
+    # Full call is mqtt.client.Client(
+        # client_id, clean_session=True, userdata=None,
+        # protocol=MQTTv31, transport="tcp")
+    # mqtt_client is the same as paho.mqtt.client
+    mqtt = mqtt_client.Client(mqtt_client.CallbackAPIVersion.VERSION1)
+    # mqtt = mqtt_client.Client(client_id, clean_session=False)
     mqtt.username_pw_set(username, password)
     mqtt.on_connect = on_connect
+    print("Connecting to ", broker, " on port ", port)
     mqtt.connect(broker, port)
     subscribe(mqtt)
     return mqtt
